@@ -64,7 +64,5 @@ class Item {
     };
   }
 
-  /// A stable local integer id derived from the Supabase UUID.
-  /// Used for scheduling/cancelling local notifications.
   int get notificationId => (id ?? '').hashCode;
 }
