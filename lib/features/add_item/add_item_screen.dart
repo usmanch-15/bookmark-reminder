@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../data/models/item_model.dart';
-import '../../data/services/item_repository.dart';
-import '../../data/services/notification_service.dart';
-import '../../data/services/supabase_service.dart';
+import 'add_item_controller.dart';
 import '../../core/constants/categories.dart';
+import '../../core/utils/recurrence_helper.dart';
 
 class AddItemScreen extends StatefulWidget {
   const AddItemScreen({super.key});
@@ -13,14 +11,12 @@ class AddItemScreen extends StatefulWidget {
 }
 
 class _AddItemScreenState extends State<AddItemScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _noteController = TextEditingController();
-  final ItemRepository _repository = ItemRepository();
-
-  String _category = AppCategories.all.first;
-  DateTime? _reminderDateTime;
-  int _priority = 1;
-  bool _saving = false;
+  final _tagsController = TextEditingController();
+  final AddItemController _controller = AddItemController();
+  String? _reminderError;
 
   Future<void> _pickDateTime() async {
     final date = await showDatePicker(
@@ -31,129 +27,150 @@ class _AddItemScreenState extends State<AddItemScreen> {
     );
     if (date == null) return;
     if (!mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
+    final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
     if (time == null) return;
 
-    setState(() {
-      _reminderDateTime =
-          DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    });
+    setState(() => _reminderError = null);
+    _controller.setReminderDateTime(
+      DateTime(date.year, date.month, date.day, time.hour, time.minute),
+    );
   }
 
-  Future<void> _saveItem() async {
-    if (_titleController.text.trim().isEmpty) {
+  Future<void> _save() async {
+    final formValid = _formKey.currentState?.validate() ?? false;
+
+    setState(() {
+      _reminderError = (_controller.recurrence != 'none' && _controller.reminderDateTime == null)
+          ? 'Recurring reminders need a start date/time'
+          : null;
+    });
+
+    if (!formValid || _reminderError != null) return;
+
+    _controller.setTitle(_titleController.text);
+    _controller.setNote(_noteController.text);
+    _controller.setTagsFromText(_tagsController.text);
+    final success = await _controller.saveItem();
+    if (success && mounted) {
+      Navigator.pop(context);
+    } else if (_controller.errorMessage != null && mounted) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Title zaroori hai')));
-      return;
+          .showSnackBar(SnackBar(content: Text(_controller.errorMessage!)));
     }
+  }
 
-    final userId = SupabaseService.currentUser?.id;
-    if (userId == null) return;
-
-    setState(() => _saving = true);
-
-    final now = DateTime.now();
-    final item = Item(
-      userId: userId,
-      title: _titleController.text.trim(),
-      note: _noteController.text.trim(),
-      category: _category,
-      reminderDateTime: _reminderDateTime,
-      priority: _priority,
-      status: 'pending',
-      createdAt: now,
-      updatedAt: now,
-    );
-
-    try {
-      final savedItem = await _repository.addItem(item);
-
-      if (_reminderDateTime != null) {
-        await NotificationService().scheduleReminder(
-          id: savedItem.notificationId,
-          title: savedItem.title,
-          body: savedItem.note.isEmpty ? 'Reminder' : savedItem.note,
-          dateTime: _reminderDateTime!,
-        );
-      }
-
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Save failed: $e')));
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+  @override
+  void dispose() {
+    _controller.dispose();
+    _titleController.dispose();
+    _noteController.dispose();
+    _tagsController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Add Item')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          TextField(
-            controller: _titleController,
-            decoration: const InputDecoration(labelText: 'Title'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _noteController,
-            maxLines: 3,
-            decoration: const InputDecoration(labelText: 'Note'),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            value: _category,
-            decoration: const InputDecoration(labelText: 'Category'),
-            items: AppCategories.all
-                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                .toList(),
-            onChanged: (v) => setState(() => _category = v!),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<int>(
-            value: _priority,
-            decoration: const InputDecoration(labelText: 'Priority'),
-            items: const [
-              DropdownMenuItem(value: 0, child: Text('Low')),
-              DropdownMenuItem(value: 1, child: Text('Medium')),
-              DropdownMenuItem(value: 2, child: Text('High')),
-            ],
-            onChanged: (v) => setState(() => _priority = v!),
-          ),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(_reminderDateTime == null
-                ? 'Set Reminder Date/Time'
-                : 'Reminder: ${_reminderDateTime!.day}/${_reminderDateTime!.month}/${_reminderDateTime!.year} '
-                '${_reminderDateTime!.hour}:${_reminderDateTime!.minute.toString().padLeft(2, '0')}'),
-            trailing: const Icon(Icons.alarm),
-            onTap: _pickDateTime,
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: _saving ? null : _saveItem,
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
+      body: ListenableBuilder(
+        listenable: _controller,
+        builder: (context, _) {
+          return Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                TextFormField(
+                  controller: _titleController,
+                  decoration: const InputDecoration(labelText: 'Title *'),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Title is required';
+                    }
+                    if (value.trim().length < 2) {
+                      return 'Title must be at least 2 characters';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _noteController,
+                  maxLines: 3,
+                  maxLength: 300,
+                  decoration: const InputDecoration(labelText: 'Note'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _tagsController,
+                  decoration: const InputDecoration(
+                    labelText: 'Tags (comma separated)',
+                    hintText: 'e.g. urgent, exam, project',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _controller.category,
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  items: AppCategories.all
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) => _controller.setCategory(v!),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  value: _controller.priority,
+                  decoration: const InputDecoration(labelText: 'Priority'),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('Low')),
+                    DropdownMenuItem(value: 1, child: Text('Medium')),
+                    DropdownMenuItem(value: 2, child: Text('High')),
+                  ],
+                  onChanged: (v) => _controller.setPriority(v!),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: _controller.recurrence,
+                  decoration: const InputDecoration(labelText: 'Repeat'),
+                  items: RecurrenceHelper.options
+                      .map((r) => DropdownMenuItem(value: r, child: Text(RecurrenceHelper.label(r))))
+                      .toList(),
+                  onChanged: (v) => _controller.setRecurrence(v!),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(_controller.reminderDateTime == null
+                      ? 'Set Reminder Date/Time'
+                      : 'Reminder: ${_controller.reminderDateTime!.day}/${_controller.reminderDateTime!.month}/${_controller.reminderDateTime!.year} '
+                      '${_controller.reminderDateTime!.hour}:${_controller.reminderDateTime!.minute.toString().padLeft(2, '0')}'),
+                  trailing: const Icon(Icons.alarm),
+                  onTap: _pickDateTime,
+                ),
+                if (_reminderError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, left: 12),
+                    child: Text(_reminderError!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                  ),
+                if (_controller.errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(_controller.errorMessage!, style: const TextStyle(color: Colors.red)),
+                  ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _controller.isSaving ? null : _save,
+                  style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                  child: _controller.isSaving
+                      ? const SizedBox(
+                      height: 20, width: 20,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('Save'),
+                ),
+              ],
             ),
-            child: _saving
-                ? const SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(
-                  color: Colors.white, strokeWidth: 2),
-            )
-                : const Text('Save'),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

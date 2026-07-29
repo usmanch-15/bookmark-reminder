@@ -13,6 +13,9 @@ class AddItemController extends ChangeNotifier {
   String category = AppCategories.all.first;
   DateTime? reminderDateTime;
   int priority = 1;
+  List<String> tags = [];
+  String recurrence = 'none';
+  int recurrenceInterval = 1;
   bool isSaving = false;
   String? errorMessage;
 
@@ -31,6 +34,24 @@ class AddItemController extends ChangeNotifier {
 
   void setReminderDateTime(DateTime value) {
     reminderDateTime = value;
+    notifyListeners();
+  }
+
+  void setTagsFromText(String rawText) {
+    tags = rawText
+        .split(',')
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+  }
+
+  void setRecurrence(String value) {
+    recurrence = value;
+    notifyListeners();
+  }
+
+  void setRecurrenceInterval(int value) {
+    recurrenceInterval = value;
     notifyListeners();
   }
 
@@ -61,6 +82,9 @@ class AddItemController extends ChangeNotifier {
       reminderDateTime: reminderDateTime,
       priority: priority,
       status: 'pending',
+      tags: tags,
+      recurrence: recurrence,
+      recurrenceInterval: recurrenceInterval,
       createdAt: now,
       updatedAt: now,
     );
