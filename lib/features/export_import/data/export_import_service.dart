@@ -9,20 +9,22 @@ import '../../../data/services/supabase_service.dart';
 
 class ExportImportService {
   Future<String> exportAsJson(List<Item> items) async {
-    final data = items.map((i) => {...i.toInsertJson(), 'id': i.id}).toList();
-    final jsonString = jsonEncode(data);
+    final List<Map<String, dynamic>> data = items
+        .map((Item i) => <String, dynamic>{...i.toInsertJson(), 'id': i.id})
+        .toList();
+    final String jsonString = jsonEncode(data);
 
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/bookmark_reminder_export.json');
+    final Directory dir = await getTemporaryDirectory();
+    final File file = File('${dir.path}/bookmark_reminder_export.json');
     await file.writeAsString(jsonString);
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+    await Share.shareXFiles(<XFile>[XFile(file.path)]);
     return file.path;
   }
 
   Future<String> exportAsCsv(List<Item> items) async {
-    final rows = <List<dynamic>>[
-      ['title', 'note', 'category', 'reminder_date_time', 'priority', 'status', 'tags'],
-      ...items.map((i) => [
+    final List<List<dynamic>> rows = <List<dynamic>>[
+      <String>['title', 'note', 'category', 'reminder_date_time', 'priority', 'status', 'tags'],
+      ...items.map((Item i) => <dynamic>[
         i.title,
         i.note,
         i.category,
@@ -33,40 +35,39 @@ class ExportImportService {
       ]),
     ];
 
-    final csvString = const ListToCsvConverter().convert(rows);
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/bookmark_reminder_export.csv');
+    final String csvString = const ListToCsvConverter().convert(rows);
+    final Directory dir = await getTemporaryDirectory();
+    final File file = File('${dir.path}/bookmark_reminder_export.csv');
     await file.writeAsString(csvString);
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+    await Share.shareXFiles(<XFile>[XFile(file.path)]);
     return file.path;
   }
 
-  /// Reads a JSON or CSV file and inserts items into Supabase.
-  /// Returns the number of items successfully imported.
   Future<int> importFromFile(String path, ItemRepository repository) async {
-    final userId = SupabaseService.currentUser?.id;
+    final String? userId = SupabaseService.currentUser?.id;
     if (userId == null) throw Exception('Not logged in');
 
-    final file = File(path);
-    final content = await file.readAsString();
+    final File file = File(path);
+    final String content = await file.readAsString();
     int importedCount = 0;
 
     if (path.endsWith('.json')) {
-      final List<dynamic> data = jsonDecode(content);
-      for (final row in data) {
-        final now = DateTime.now();
-        final item = Item(
+      final List<dynamic> data = jsonDecode(content) as List<dynamic>;
+      for (final dynamic row in data) {
+        final Map<String, dynamic> map = row as Map<String, dynamic>;
+        final DateTime now = DateTime.now();
+        final Item item = Item(
           userId: userId,
-          title: row['title'] ?? 'Untitled',
-          note: row['note'] ?? '',
-          category: row['category'] ?? 'Personal',
-          reminderDateTime: row['reminder_date_time'] != null &&
-              row['reminder_date_time'].toString().isNotEmpty
-              ? DateTime.tryParse(row['reminder_date_time'])
+          title: (map['title'] ?? 'Untitled') as String,
+          note: (map['note'] ?? '') as String,
+          category: (map['category'] ?? 'Personal') as String,
+          reminderDateTime: map['reminder_date_time'] != null &&
+              map['reminder_date_time'].toString().isNotEmpty
+              ? DateTime.tryParse(map['reminder_date_time'].toString())
               : null,
-          priority: row['priority'] ?? 1,
+          priority: (map['priority'] ?? 1) as int,
           status: 'pending',
-          tags: row['tags'] != null ? List<String>.from(row['tags']) : [],
+          tags: map['tags'] != null ? List<String>.from(map['tags'] as List) : <String>[],
           createdAt: now,
           updatedAt: now,
         );
@@ -74,25 +75,21 @@ class ExportImportService {
         importedCount++;
       }
     } else if (path.endsWith('.csv')) {
-      final rows = const CsvToListConverter().convert(content, eol: '\n');
-      // Skip header row (index 0)
+      final List<List<dynamic>> rows = const CsvToListConverter().convert(content, eol: '\n');
       for (int i = 1; i < rows.length; i++) {
-        final row = rows[i];
+        final List<dynamic> row = rows[i];
         if (row.length < 6) continue;
-        final now = DateTime.now();
-        final item = Item(
+        final DateTime now = DateTime.now();
+        final Item item = Item(
           userId: userId,
           title: row[0].toString(),
           note: row[1].toString(),
           category: row[2].toString(),
-          reminderDateTime: row[3].toString().isNotEmpty
-              ? DateTime.tryParse(row[3].toString())
-              : null,
+          reminderDateTime:
+          row[3].toString().isNotEmpty ? DateTime.tryParse(row[3].toString()) : null,
           priority: int.tryParse(row[4].toString()) ?? 1,
           status: 'pending',
-          tags: row[5].toString().isNotEmpty
-              ? row[5].toString().split('|')
-              : [],
+          tags: row[5].toString().isNotEmpty ? row[5].toString().split('|') : <String>[],
           createdAt: now,
           updatedAt: now,
         );

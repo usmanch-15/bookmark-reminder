@@ -4,6 +4,7 @@ import '../../data/services/item_repository.dart';
 import '../../data/services/notification_service.dart';
 import '../../data/services/supabase_service.dart';
 import '../../core/constants/categories.dart';
+import '../../core/sync/sync_service.dart';
 
 class AddItemController extends ChangeNotifier {
   final ItemRepository _repository = ItemRepository();
@@ -18,6 +19,7 @@ class AddItemController extends ChangeNotifier {
   int recurrenceInterval = 1;
   bool isSaving = false;
   String? errorMessage;
+  bool savedOffline = false;
 
   void setTitle(String value) => title = value;
   void setNote(String value) => note = value;
@@ -38,11 +40,7 @@ class AddItemController extends ChangeNotifier {
   }
 
   void setTagsFromText(String rawText) {
-    tags = rawText
-        .split(',')
-        .map((t) => t.trim())
-        .where((t) => t.isNotEmpty)
-        .toList();
+    tags = rawText.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
   }
 
   void setRecurrence(String value) {
@@ -64,13 +62,14 @@ class AddItemController extends ChangeNotifier {
 
     final userId = SupabaseService.currentUser?.id;
     if (userId == null) {
-      errorMessage = 'User login nahi hai';
+      errorMessage = 'Session expired. Please log in again.';
       notifyListeners();
       return false;
     }
 
     isSaving = true;
     errorMessage = null;
+    savedOffline = false;
     notifyListeners();
 
     final now = DateTime.now();
@@ -90,23 +89,31 @@ class AddItemController extends ChangeNotifier {
     );
 
     try {
-      final savedItem = await _repository.addItem(item);
+      // Offline-aware: tries Supabase first, queues locally if it fails
+      // (e.g. no internet). Notification is only scheduled if the save
+      // succeeded immediately with a real server id.
+      final wentOnline = await SyncService().addItemOfflineAware(item);
 
-      if (reminderDateTime != null) {
+      if (wentOnline && reminderDateTime != null) {
+        // Re-fetch isn't strictly needed here since addItemOfflineAware
+        // doesn't return the saved row; schedule using a locally
+        // generated notification id based on title+timestamp instead.
         await NotificationService().scheduleReminder(
-          id: savedItem.notificationId,
-          title: savedItem.title,
-          body: savedItem.note.isEmpty ? 'Reminder' : savedItem.note,
+          id: '${item.title}-${now.millisecondsSinceEpoch}'.hashCode,
+          title: item.title,
+          body: item.note.isEmpty ? 'Reminder' : item.note,
           dateTime: reminderDateTime!,
+          priority: priority,
         );
       }
 
       isSaving = false;
+      savedOffline = !wentOnline;
       notifyListeners();
       return true;
     } catch (e) {
       isSaving = false;
-      errorMessage = 'Save failed: $e';
+      errorMessage = 'Could not save item. Please check your connection and try again.';
       notifyListeners();
       return false;
     }

@@ -3,6 +3,8 @@ import '../../core/theme/theme_controller.dart';
 import '../../data/services/supabase_service.dart';
 import '../../data/services/prefs_service.dart';
 import '../auth/login_screen.dart';
+import '../legal/privacy_policy_screen.dart';
+import '../legal/terms_screen.dart';
 import 'profile_screen.dart';
 import 'widgets/quiet_hours_tile.dart';
 import 'widgets/sync_status_tile.dart';
@@ -27,6 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadPrefs() async {
     final sound = await PrefsService.isSoundEnabled();
     final vibration = await PrefsService.isVibrationEnabled();
+    if (!mounted) return;
     setState(() {
       _soundEnabled = sound;
       _vibrationEnabled = vibration;
@@ -98,6 +101,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 value: _soundEnabled,
                 onChanged: (v) async {
                   await PrefsService.setSoundEnabled(v);
+                  if (!mounted) return;
                   setState(() => _soundEnabled = v);
                 },
               ),
@@ -106,12 +110,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 value: _vibrationEnabled,
                 onChanged: (v) async {
                   await PrefsService.setVibrationEnabled(v);
+                  if (!mounted) return;
                   setState(() => _vibrationEnabled = v);
                 },
               ),
               const QuietHoursTile(),
               const Divider(),
               const SyncStatusTile(),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.privacy_tip_outlined),
+                title: const Text('Privacy Policy'),
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const PrivacyPolicyScreen())),
+              ),
+              ListTile(
+                leading: const Icon(Icons.description_outlined),
+                title: const Text('Terms of Service'),
+                onTap: () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const TermsScreen())),
+              ),
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.logout, color: Colors.red),

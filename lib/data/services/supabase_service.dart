@@ -1,16 +1,18 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-/// Replace these with your own project's values from
-/// Supabase Dashboard -> Project Settings -> API
-const String supabaseUrl = 'https://YOUR_PROJECT.supabase.co';
-const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SupabaseService {
   static Future<void> init() async {
-    await Supabase.initialize(
-      url: supabaseUrl,
-      anonKey: supabaseAnonKey,
-    );
+    final String url = dotenv.env['SUPABASE_URL'] ?? '';
+    final String anonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+
+    if (url.isEmpty || anonKey.isEmpty) {
+      throw Exception(
+        'Supabase credentials missing. Check your .env file has SUPABASE_URL and SUPABASE_ANON_KEY.',
+      );
+    }
+
+    await Supabase.initialize(url: url, anonKey: anonKey);
   }
 
   static SupabaseClient get client => Supabase.instance.client;
@@ -19,8 +21,7 @@ class SupabaseService {
 
   static bool get isLoggedIn => currentUser != null;
 
-  static Stream<AuthState> get authStateChanges =>
-      client.auth.onAuthStateChange;
+  static Stream<AuthState> get authStateChanges => client.auth.onAuthStateChange;
 
   static Future<AuthResponse> signUp(String email, String password) {
     return client.auth.signUp(email: email, password: password);

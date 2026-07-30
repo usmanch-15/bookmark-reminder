@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import '../../data/models/item_model.dart';
 import '../../data/services/item_repository.dart';
 
@@ -9,13 +9,12 @@ class HomeController extends ChangeNotifier {
 
   String searchQuery = '';
   String? selectedCategory;
-  int? selectedPriority; // null = any
+  int? selectedPriority;
   DateTimeRange? dateRange;
   SavedView savedView = SavedView.all;
 
-  // Bulk selection
   bool selectionMode = false;
-  final Set<String> selectedIds = {};
+  final Set<String> selectedIds = <String>{};
 
   Stream<List<Item>> get itemsStream => _repository.watchItems();
 
@@ -52,7 +51,6 @@ class HomeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---- Selection mode ----
   void toggleSelectionMode() {
     selectionMode = !selectionMode;
     if (!selectionMode) selectedIds.clear();
@@ -75,21 +73,21 @@ class HomeController extends ChangeNotifier {
   }
 
   Future<void> bulkComplete() async {
-    for (final id in selectedIds) {
+    for (final String id in selectedIds) {
       await _repository.updateStatus(id, 'completed');
     }
     clearSelection();
   }
 
   Future<void> bulkArchive() async {
-    for (final id in selectedIds) {
+    for (final String id in selectedIds) {
       await _repository.updateStatus(id, 'archived');
     }
     clearSelection();
   }
 
   Future<void> bulkDelete() async {
-    for (final id in selectedIds) {
+    for (final String id in selectedIds) {
       await _repository.updateStatus(id, 'deleted');
     }
     clearSelection();
@@ -101,26 +99,25 @@ class HomeController extends ChangeNotifier {
   }
 
   List<Item> filteredItems(List<Item> items) {
-    var result = items.where((item) {
+    List<Item> result = items.where((Item item) {
       if (item.status != 'pending') return false;
 
-      final matchesSearch = item.title.toLowerCase().contains(searchQuery) ||
+      final bool matchesSearch = item.title.toLowerCase().contains(searchQuery) ||
           item.note.toLowerCase().contains(searchQuery);
-      final matchesCategory =
+      final bool matchesCategory =
           selectedCategory == null || item.category == selectedCategory;
-      final matchesPriority =
+      final bool matchesPriority =
           selectedPriority == null || item.priority == selectedPriority;
 
       bool matchesDateRange = true;
       if (dateRange != null && item.reminderDateTime != null) {
-        matchesDateRange = item.reminderDateTime!.isAfter(
-            dateRange!.start.subtract(const Duration(seconds: 1))) &&
-            item.reminderDateTime!
-                .isBefore(dateRange!.end.add(const Duration(days: 1)));
+        matchesDateRange = item.reminderDateTime!
+            .isAfter(dateRange!.start.subtract(const Duration(seconds: 1))) &&
+            item.reminderDateTime!.isBefore(dateRange!.end.add(const Duration(days: 1)));
       }
 
       bool matchesSavedView = true;
-      final now = DateTime.now();
+      final DateTime now = DateTime.now();
       switch (savedView) {
         case SavedView.today:
           matchesSavedView = item.reminderDateTime != null &&
@@ -129,8 +126,8 @@ class HomeController extends ChangeNotifier {
               item.reminderDateTime!.day == now.day;
           break;
         case SavedView.upcoming:
-          matchesSavedView = item.reminderDateTime != null &&
-              item.reminderDateTime!.isAfter(now);
+          matchesSavedView =
+              item.reminderDateTime != null && item.reminderDateTime!.isAfter(now);
           break;
         case SavedView.overdue:
           matchesSavedView = item.isOverdue;
@@ -150,8 +147,7 @@ class HomeController extends ChangeNotifier {
           matchesSavedView;
     }).toList();
 
-    // Pinned items first, then by reminder date
-    result.sort((a, b) {
+    result.sort((Item a, Item b) {
       if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
       if (a.reminderDateTime == null) return 1;
       if (b.reminderDateTime == null) return -1;

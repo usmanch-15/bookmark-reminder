@@ -4,8 +4,6 @@ import '../../data/services/item_repository.dart';
 import '../../data/services/supabase_service.dart';
 import 'pending_write_queue.dart';
 
-/// Listens for connectivity changes and replays any queued offline writes.
-/// Call SyncService().init() once from main.dart after Supabase init.
 class SyncService {
   static final SyncService _instance = SyncService._internal();
   factory SyncService() => _instance;
@@ -15,7 +13,7 @@ class SyncService {
 
   void init() {
     Connectivity().onConnectivityChanged.listen((results) {
-      final isOnline = !results.contains(ConnectivityResult.none);
+      final bool isOnline = !results.contains(ConnectivityResult.none);
       if (isOnline) {
         _flushQueue();
       }
@@ -26,13 +24,13 @@ class SyncService {
     final pending = await PendingWriteQueue.getAll();
     if (pending.isEmpty) return;
 
-    final userId = SupabaseService.currentUser?.id;
+    final String? userId = SupabaseService.currentUser?.id;
     if (userId == null) return;
 
-    for (final json in pending) {
+    for (final Map<String, dynamic> json in pending) {
       try {
-        final now = DateTime.now();
-        final item = Item(
+        final DateTime now = DateTime.now();
+        final Item item = Item(
           userId: userId,
           title: json['title'] ?? 'Untitled',
           note: json['note'] ?? '',
@@ -47,7 +45,6 @@ class SyncService {
         );
         await _repository.addItem(item);
       } catch (_) {
-        // Leave remaining queue intact if one item fails; retry next time.
         return;
       }
     }
@@ -55,8 +52,10 @@ class SyncService {
     await PendingWriteQueue.clear();
   }
 
-  /// Call this instead of repository.addItem() directly when you want
-  /// offline-safe writes. Falls back to queueing on failure.
+  Future<void> flushQueuePublic() async {
+    await _flushQueue();
+  }
+
   Future<bool> addItemOfflineAware(Item item) async {
     try {
       await _repository.addItem(item);

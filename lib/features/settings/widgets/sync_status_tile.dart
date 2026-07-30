@@ -24,6 +24,7 @@ class _SyncStatusTileState extends State<SyncStatusTile> {
   Future<void> _load() async {
     final lastSync = await PrefsService.getLastSync();
     final hasPending = await PendingWriteQueue.hasPending;
+    if (!mounted) return;
     setState(() {
       _lastSync = lastSync;
       _hasPending = hasPending;
@@ -34,6 +35,7 @@ class _SyncStatusTileState extends State<SyncStatusTile> {
     setState(() => _retrying = true);
     await SyncService().flushQueuePublic();
     await _load();
+    if (!mounted) return;
     setState(() => _retrying = false);
   }
 

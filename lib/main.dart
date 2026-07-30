@@ -1,17 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_controller.dart';
+import 'core/sync/sync_service.dart';
 import 'data/services/supabase_service.dart';
 import 'data/services/notification_service.dart';
 import 'features/splash/splash_screen.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SupabaseService.init();
-  await NotificationService().init();
-  await NotificationService().requestPermission();
-  await ThemeController.loadSavedTheme();
-  runApp(const BookmarkReminderApp());
+  await dotenv.load(fileName: '.env');
+
+  final String sentryDsn = dotenv.env['SENTRY_DSN'] ?? '';
+
+  Future<void> bootstrap() async {
+    await SupabaseService.init();
+    await NotificationService().init();
+    await NotificationService().requestPermission();
+    await ThemeController.loadSavedTheme();
+    SyncService().init();
+    runApp(const BookmarkReminderApp());
+  }
+
+  if (sentryDsn.isNotEmpty) {
+    await SentryFlutter.init(
+          (options) {
+        options.dsn = sentryDsn;
+        options.tracesSampleRate = 0.2;
+      },
+      appRunner: bootstrap,
+    );
+  } else {
+    await bootstrap();
+  }
 }
 
 class BookmarkReminderApp extends StatelessWidget {
