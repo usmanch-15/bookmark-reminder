@@ -25,13 +25,11 @@ dependencies:
   path_provider: ^2.1.4
   file_picker: ^8.1.2
 
-  # Phase 3: Offline sync, Home widget
+  # Phase 3: Offline sync
   connectivity_plus: ^6.0.5
-  home_widget: ^0.6.0
 
-  # Production: env config + crash reporting
+  # Production: env config
   flutter_dotenv: ^5.1.0
-  sentry_flutter: ^8.9.0
 
 dev_dependencies:
   flutter_test:
