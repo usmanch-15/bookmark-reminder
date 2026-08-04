@@ -44,7 +44,7 @@ class _ExportImportScreenState extends State<ExportImportScreen> {
   }
 
   Future<void> _pickImportFile() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json', 'csv'],
     );

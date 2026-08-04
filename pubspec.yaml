@@ -18,12 +18,11 @@ dependencies:
   shared_preferences: ^2.2.3
   cupertino_icons: ^1.0.6
 
-  # Phase 2: Calendar, Export/Import
+  # Phase 2: Calendar, Export
   table_calendar: ^3.1.2
   csv: ^6.0.0
   share_plus: ^10.0.0
   path_provider: ^2.1.4
-  file_picker: ^8.1.2
 
   # Phase 3: Offline sync
   connectivity_plus: ^6.0.5
